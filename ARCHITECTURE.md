@@ -197,7 +197,30 @@ current behavior first, then confirming it stayed green after the change —
 per the brief's instruction that nobody hands over a spec, so working out
 current behavior and protecting it is the actual exercise.
 
-## 6. Submission checklist
+## 6. Linting — set up, then actually run (it had never worked)
+
+`package.json` had a `lint` script (`next lint`) since the original clone,
+but no ESLint packages were installed and no config file existed — running
+it failed immediately. Set up `eslint.config.mjs` (flat config,
+`next/core-web-vitals` + `next/typescript`, matching Next 15's own
+generator) and pinned `eslint@9` (the latest, `10`, breaks
+`eslint-config-next@15`'s internal patching — confirmed by trying it first
+and getting a real error, not assumed).
+
+Running it for the first time surfaced **8 real, pre-existing findings**,
+all in files untouched by any refactor above (confirming they predate this
+work): 2 unescaped-apostrophe JSX errors (`waitlist/page.tsx`), and 6
+unused-import warnings (`admin/companies/page.tsx`, `db/schema.ts`,
+`admin-companies.ts`, `admin.ts`, `corporate-bookings.ts`, `trainers.ts`).
+Fixed all 8, verified live in the browser afterward. One, `members.ts`'s
+`passwordHash: _omit` destructure, isn't dead code — it's how the API
+response strips the password hash before returning a user to the client —
+so instead of deleting it, the lint rule was configured to respect the
+`_`-prefix "intentionally unused" convention already in use, rather than
+removing security-relevant code to silence a warning. `pnpm lint` now
+passes clean.
+
+## 7. Submission checklist
 
 - [x] Cloned, not forked.
 - [ ] Pushed to a new **private** repo under my own account (not this one).
@@ -205,7 +228,7 @@ current behavior and protecting it is the actual exercise.
 - [ ] Optional video recording.
 - [x] AI tooling disclosed below (not scored, but expected).
 
-## 7. Tooling disclosure
+## 8. Tooling disclosure
 
 Claude Code (Sonnet 5) was used end-to-end: reading the cloned repo,
 finding the issues in §2 by comparing files line-by-line rather than
@@ -215,6 +238,8 @@ standalone bugs (§2.4, the dead query in §2.2), restructuring the two
 frontend pages that actually violated the brief's stated test, and
 verifying all of it via `vitest` (43/43), `tsc --noEmit`, and live browser
 sessions against the running dev server signed in as each of the seeded
-roles. Every claim in this document is grounded in a specific file, test
-run, or browser session from this work — nothing here is asserted from
-memory.
+roles. A second pass (§6) set up the linter that had never actually run
+against this codebase, fixed the 8 findings it turned up, and re-verified
+the full test suite and a browser session afterward. Every claim in this
+document is grounded in a specific file, test run, or browser session from
+this work — nothing here is asserted from memory.

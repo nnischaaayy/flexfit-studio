@@ -21,7 +21,7 @@ export default function WaitlistPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Waitlist</h1>
         <p className="muted mt-1 text-sm">
-          Classes you're waitlisted for
+          Classes you&apos;re waitlisted for
         </p>
       </div>
 
@@ -58,7 +58,7 @@ export default function WaitlistPage() {
           ))}
         </div>
       ) : (
-        <p className="muted text-sm">You're not waitlisted for any classes.</p>
+        <p className="muted text-sm">You&apos;re not waitlisted for any classes.</p>
       )}
     </div>
   );
