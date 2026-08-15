@@ -11,6 +11,13 @@ import {
 } from "@/db/schema";
 import { router, adminProcedure } from "../trpc";
 
+/** YYYY-MM-DD for `n` days before now — the report window used by the last-14-days queries below. */
+function daysAgoDateString(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
 export const adminRouter = router({
   stats: adminProcedure.query(async ({ ctx }) => {
     const today = new Date().toISOString().slice(0, 10);
@@ -161,9 +168,7 @@ export const adminRouter = router({
   }),
 
   checkinsPerDay: adminProcedure.query(async ({ ctx }) => {
-    const start = new Date();
-    start.setDate(start.getDate() - 14);
-    const startStr = start.toISOString().slice(0, 10);
+    const startStr = daysAgoDateString(14);
 
     const rows = await ctx.db
       .select({
@@ -182,9 +187,7 @@ export const adminRouter = router({
   }),
 
   topTrainers: adminProcedure.query(async ({ ctx }) => {
-    const start = new Date();
-    start.setDate(start.getDate() - 14);
-    const startStr = start.toISOString().slice(0, 10);
+    const startStr = daysAgoDateString(14);
 
     const rows = await ctx.db
       .select({
@@ -215,9 +218,7 @@ export const adminRouter = router({
   }),
 
   noShowList: adminProcedure.query(async ({ ctx }) => {
-    const start = new Date();
-    start.setDate(start.getDate() - 14);
-    const startStr = start.toISOString().slice(0, 10);
+    const startStr = daysAgoDateString(14);
 
     const rows = await ctx.db
       .select({

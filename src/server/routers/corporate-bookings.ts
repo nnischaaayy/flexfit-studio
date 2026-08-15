@@ -10,16 +10,19 @@ import {
   users,
 } from "@/db/schema";
 import { router, protectedProcedure, staffProcedure } from "../trpc";
+import {
+  hoursUntil,
+  checkCredit,
+  nextBookingStatus,
+  isRefundable,
+  deductGuarded,
+} from "../services/booking-engine";
 
 /**
  * Corporate members may cancel free of charge up to this many hours before
  * the class starts. Cancelling later still frees the spot but forfeits the credit.
  */
 export const CORPORATE_FREE_CANCELLATION_HOURS = 24;
-
-function hoursUntil(iso: string, now = new Date()): number {
-  return (new Date(iso).getTime() - now.getTime()) / 36e5;
-}
 
 async function getCompanyForMember(
   db: typeof import("@/db").db,
@@ -121,7 +124,8 @@ export const corporateBookingsRouter = router({
       }
 
       const company = companyRow.companies;
-      if (company.creditPoolBalance < cls.creditCost) {
+      const credit = checkCredit(company.creditPoolBalance, cls.creditCost);
+      if (!credit.ok) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Your company does not have enough credits.",
@@ -138,7 +142,8 @@ export const corporateBookingsRouter = router({
           ),
         );
 
-      const isFull = Number(count) >= cls.capacity;
+      const status = nextBookingStatus(Number(count), cls.capacity);
+      const isFull = status === "waitlisted";
 
       const created = await ctx.db
         .insert(corporateBookings)
@@ -146,7 +151,7 @@ export const corporateBookingsRouter = router({
           classId: cls.id,
           userId: ctx.user.id,
           companyId: company.id,
-          status: isFull ? "waitlisted" : "booked",
+          status,
           creditsUsed: isFull ? 0 : cls.creditCost,
         })
         .returning()
@@ -194,9 +199,11 @@ export const corporateBookingsRouter = router({
         });
       }
 
-      const refundable =
-        hoursUntil(row.cls.startsAt) >= CORPORATE_FREE_CANCELLATION_HOURS &&
-        row.booking.creditsUsed > 0;
+      const refundable = isRefundable(
+        row.cls.startsAt,
+        CORPORATE_FREE_CANCELLATION_HOURS,
+        row.booking.creditsUsed,
+      );
 
       await ctx.db
         .update(corporateBookings)
@@ -247,15 +254,14 @@ export const corporateBookingsRouter = router({
             .where(eq(companies.id, next.companyId))
             .get();
 
-          if (company && company.creditPoolBalance >= row.cls.creditCost) {
+          const newBalance = company
+            ? deductGuarded(company.creditPoolBalance, row.cls.creditCost)
+            : null;
+
+          if (company && newBalance !== null) {
             await ctx.db
               .update(companies)
-              .set({
-                creditPoolBalance: Math.max(
-                  0,
-                  company.creditPoolBalance - row.cls.creditCost,
-                ),
-              })
+              .set({ creditPoolBalance: newBalance })
               .where(eq(companies.id, company.id));
           }
         }

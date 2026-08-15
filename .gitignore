@@ -4,9 +4,13 @@ out
 build
 *.db
 *.db-journal
+/drizzle-test
 .env
 .env.local
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts
 coverage
+
+# Private working notes — not part of the submission, see ARCHITECTURE.md instead
+CHANGES-detailed.md

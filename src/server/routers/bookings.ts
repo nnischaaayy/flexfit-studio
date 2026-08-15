@@ -3,6 +3,13 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { bookings, classes, memberships, checkins, users } from "@/db/schema";
 import { router, protectedProcedure, staffProcedure } from "../trpc";
+import {
+  hoursUntil,
+  checkCredit,
+  nextBookingStatus,
+  isRefundable,
+  deductFloored,
+} from "../services/booking-engine";
 
 /**
  * Members may cancel free of charge up to this many hours before the class
@@ -12,10 +19,6 @@ export const FREE_CANCELLATION_HOURS = 12;
 
 /** Plans with this many credits are treated as unlimited and never decrement. */
 export const UNLIMITED_CREDITS = 999;
-
-function hoursUntil(iso: string, now = new Date()): number {
-  return (new Date(iso).getTime() - now.getTime()) / 36e5;
-}
 
 async function activeMembershipFor(
   db: typeof import("@/db").db,
@@ -116,8 +119,8 @@ export const bookingsRouter = router({
         });
       }
 
-      const unlimited = membership.creditsRemaining >= UNLIMITED_CREDITS;
-      if (!unlimited && membership.creditsRemaining < cls.creditCost) {
+      const credit = checkCredit(membership.creditsRemaining, cls.creditCost, UNLIMITED_CREDITS);
+      if (!credit.ok) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Not enough class credits remaining.",
@@ -131,7 +134,8 @@ export const bookingsRouter = router({
           and(eq(bookings.classId, cls.id), eq(bookings.status, "booked")),
         );
 
-      const isFull = Number(count) >= cls.capacity;
+      const status = nextBookingStatus(Number(count), cls.capacity);
+      const isFull = status === "waitlisted";
 
       const created = await ctx.db
         .insert(bookings)
@@ -139,13 +143,13 @@ export const bookingsRouter = router({
           classId: cls.id,
           userId: ctx.user.id,
           membershipId: membership.id,
-          status: isFull ? "waitlisted" : "booked",
+          status,
           creditsUsed: isFull ? 0 : cls.creditCost,
         })
         .returning()
         .get();
 
-      if (!isFull && !unlimited) {
+      if (!isFull && !credit.unlimited) {
         await ctx.db
           .update(memberships)
           .set({ creditsRemaining: membership.creditsRemaining - cls.creditCost })
@@ -185,9 +189,11 @@ export const bookingsRouter = router({
         });
       }
 
-      const refundable =
-        hoursUntil(row.cls.startsAt) >= FREE_CANCELLATION_HOURS &&
-        row.booking.creditsUsed > 0;
+      const refundable = isRefundable(
+        row.cls.startsAt,
+        FREE_CANCELLATION_HOURS,
+        row.booking.creditsUsed,
+      );
 
       await ctx.db
         .update(bookings)
@@ -239,12 +245,7 @@ export const bookingsRouter = router({
             if (ms && ms.creditsRemaining < UNLIMITED_CREDITS) {
               await ctx.db
                 .update(memberships)
-                .set({
-                  creditsRemaining: Math.max(
-                    0,
-                    ms.creditsRemaining - row.cls.creditCost,
-                  ),
-                })
+                .set({ creditsRemaining: deductFloored(ms.creditsRemaining, row.cls.creditCost) })
                 .where(eq(memberships.id, ms.id));
             }
           }

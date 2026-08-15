@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { trpc } from "@/lib/trpc";
+import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { formatDateTime } from "@/lib/format";
+
+type LookedUpMember = RouterOutputs["members"]["lookupByEmailOrPhone"];
 
 export default function KioskPage() {
   const { data: user } = trpc.auth.me.useQuery();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [selectedMember, setSelectedMember] = useState<LookedUpMember | null>(null);
   const [checkinSuccess, setCheckinSuccess] = useState<{ memberName: string; className: string } | null>(null);
 
   const lookupMember = trpc.members.lookupByEmailOrPhone.useQuery(

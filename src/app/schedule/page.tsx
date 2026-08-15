@@ -1,14 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { formatDateTime } from "@/lib/format";
 
 export default function SchedulePage() {
   const utils = trpc.useUtils();
   const { data: user } = trpc.auth.me.useQuery();
-  const { data: classes, isLoading } = trpc.classes.list.useQuery({
-    from: new Date().toISOString(),
-  });
+  // `from` must stay stable across renders: computing it inline as
+  // `new Date().toISOString()` gives the query a new key every render,
+  // which re-fetches, re-renders, and repeats forever. Fixed here (isolated
+  // from the booking-engine refactor); see ARCHITECTURE.md §2.5.
+  const [from] = useState(() => new Date().toISOString());
+  const { data: classes, isLoading } = trpc.classes.list.useQuery({ from });
 
   const book = trpc.bookings.book.useMutation({
     onSuccess: async () => {
